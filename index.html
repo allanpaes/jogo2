@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry Dash - Neon Clone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        
+        <div id="game-over-screen" class="hidden">
+            <h1 class="neon-text-red">GAME OVER</h1>
+            <p>Distância Percorrida: <span id="final-score">0</span>m</p>
+            <button id="restart-btn">Tentar Novamente</button>
+            <small>ou pressione Espaço para reiniciar</small>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
