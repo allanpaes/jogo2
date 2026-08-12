@@ -1,1 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jogo da Cobrinha (Snake)</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
 
+  <div class="game-container">
+    <header class="game-header">
+      <h1>SNAKE GAME</h1>
+      <div class="score-board">
+        <div class="score-box">
+          <span>PONTOS</span>
+          <p id="current-score">0</p>
+        </div>
+        <div class="score-box">
+          <span>RECORDE</span>
+          <p id="high-score">0</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="canvas-wrapper">
+      <canvas id="gameCanvas" width="400" height="400"></canvas>
+      
+      <div id="game-over-screen" class="overlay hidden">
+        <h2>FIM DE JOGO!</h2>
+        <p>Sua pontuação: <span id="final-score">0</span></p>
+        <button id="restart-btn">JOGAR NOVAMENTE</button>
+      </div>
+
+      <div id="start-screen" class="overlay">
+        <h2>PRONTO?</h2>
+        <p>Use as setas do teclado ou W, A, S, D para jogar.</p>
+        <button id="start-btn">INICIAR JOGO</button>
+      </div>
+    </div>
+
+    <div class="mobile-controls">
+      <button class="control-btn up" id="btn-up">▲</button>
+      <div class="horizontal-controls">
+        <button class="control-btn left" id="btn-left">◄</button>
+        <button class="control-btn down" id="btn-down">▼</button>
+        <button class="control-btn right" id="btn-right">►</button>
+      </div>
+    </div>
+
+    <footer class="game-footer">
+      <p>Pressione <strong>Espaço</strong> para pausar</p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
