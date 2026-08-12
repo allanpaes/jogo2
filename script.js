@@ -1,305 +1,347 @@
-// CONFIGURAÇÕES E ESTADO DO JOGO
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-// Elementos da Interface
-const currentScoreElement = document.getElementById("current-score");
-const highScoreElement = document.getElementById("high-score");
-const finalScoreElement = document.getElementById("final-score");
-const startScreen = document.getElementById("start-screen");
-const gameOverScreen = document.getElementById("game-over-screen");
-const startBtn = document.getElementById("start-btn");
-const restartBtn = document.getElementById("restart-btn");
+const gameOverScreen = document.getElementById('game-over-screen');
+const finalScoreEl = document.getElementById('final-score');
+const restartBtn = document.getElementById('restart-btn');
 
-// Botões Mobile
-const btnUp = document.getElementById("btn-up");
-const btnDown = document.getElementById("btn-down");
-const btnLeft = document.getElementById("btn-left");
-const btnRight = document.getElementById("btn-right");
+// Configurações do Jogo
+const GROUND_Y = 320;
+let baseSpeed = 6;
+let currentSpeed = baseSpeed;
+let distance = 0;
+let isGameOver = false;
 
-// Constantes do Grid
-const GRID_SIZE = 20; // 20x20 blocos
-const TILE_SIZE = canvas.width / GRID_SIZE;
+// Estado das Teclas
+let jumpRequested = false;
 
-// Estado do Jogo
-let snake = [];
-let food = { x: 0, y: 0 };
-let dx = 1; // Direção X (-1, 0, 1)
-let dy = 0; // Direção Y (-1, 0, 1)
-let nextDx = 1;
-let nextDy = 0;
+// Configuração do Jogador (Quadrado)
+const player = {
+    x: 100,
+    y: GROUND_Y - 40,
+    size: 40,
+    vy: 0,
+    gravity: 0.8,
+    jumpForce: -14,
+    isGrounded: false,
+    rotation: 0, // em radianos
+    rotationSpeed: 0.15,
 
-let score = 0;
-let highScore = localStorage.getItem("snake_high_score") || 0;
-let gameInterval = null;
-let isPaused = false;
-let isRunning = false;
-const GAME_SPEED = 100; // Milissegundos por quadro
+    reset() {
+        this.y = GROUND_Y - this.size;
+        this.vy = 0;
+        this.isGrounded = true;
+        this.rotation = 0;
+    },
 
-// INICIALIZAÇÃO
-highScoreElement.textContent = highScore;
+    update() {
+        // Pulo
+        if (jumpRequested && this.isGrounded) {
+            this.vy = this.jumpForce;
+            this.isGrounded = false;
+            jumpRequested = false;
+        }
 
-// EVENT LISTENERS
-startBtn.addEventListener("click", startGame);
-restartBtn.addEventListener("click", startGame);
+        // Aplica Gravidade
+        this.vy += this.gravity;
+        this.y += this.vy;
 
-document.addEventListener("keydown", handleKeyPress);
+        // Rotação contínua enquanto estiver no ar
+        if (!this.isGrounded) {
+            this.rotation += this.rotationSpeed;
+        } else {
+            // Alinha o quadrado ao chão (múltiplo de 90° / PI/2)
+            this.rotation = Math.round(this.rotation / (Math.PI / 2)) * (Math.PI / 2);
+        }
 
-// Suporte a Controles Touch/Mobile
-btnUp.addEventListener("click", () => setDirection(0, -1));
-btnDown.addEventListener("click", () => setDirection(0, 1));
-btnLeft.addEventListener("click", () => setDirection(-1, 0));
-btnRight.addEventListener("click", () => setDirection(1, 0));
+        // Colisão simples com o Chão Principal
+        if (this.y + this.size >= GROUND_Y) {
+            this.y = GROUND_Y - this.size;
+            this.vy = 0;
+            this.isGrounded = true;
+        }
+    },
 
-// FUNÇÕES PRINCIPAIS DO JOGO
+    draw() {
+        ctx.save();
+        // Translada e rotaciona a partir do centro do jogador
+        ctx.translate(this.x + this.size / 2, this.y + this.size / 2);
+        ctx.rotate(this.rotation);
 
-function startGame() {
-  // Reseta variáveis do estado
-  snake = [
-    { x: 10, y: 10 },
-    { x: 9, y: 10 },
-    { x: 8, y: 10 }
-  ];
-  dx = 1;
-  dy = 0;
-  nextDx = 1;
-  nextDy = 0;
-  score = 0;
-  isPaused = false;
-  isRunning = true;
+        // Estilo Neon
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 15;
+        ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
 
-  currentScoreElement.textContent = score;
-  
-  // Esconde telas de overlay
-  startScreen.classList.add("hidden");
-  gameOverScreen.classList.add("hidden");
+        // Borda interna para detalhe visual
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-this.size / 2 + 4, -this.size / 2 + 4, this.size - 8, this.size - 8);
 
-  // Gera a primeira comida
-  spawnFood();
+        ctx.restore();
+    }
+};
 
-  // Inicia o loop do jogo
-  if (gameInterval) clearInterval(gameInterval);
-  gameInterval = setInterval(gameLoop, GAME_SPEED);
-}
+// Gerenciador de Obstáculos
+let obstacles = [];
+let spawnTimer = 0;
 
-function gameLoop() {
-  if (isPaused) return;
-
-  updatePosition();
-  
-  if (checkCollision()) {
-    handleGameOver();
-    return;
-  }
-
-  draw();
-}
-
-// LÓGICA DO JOGO
-
-function updatePosition() {
-  // Aplica a nova direção pendente
-  dx = nextDx;
-  dy = nextDy;
-
-  // Cria a nova cabeça
-  const head = { x: snake[0].x + dx, y: snake[0].y + dy };
-  snake.unshift(head);
-
-  // Verifica se comeu a fruta
-  if (head.x === food.x && head.y === food.y) {
-    score += 10;
-    currentScoreElement.textContent = score;
-
-    if (score > highScore) {
-      highScore = score;
-      highScoreElement.textContent = highScore;
-      localStorage.setItem("snake_high_score", highScore);
+class Obstacle {
+    constructor(type) {
+        this.type = type; // 'spike' ou 'block'
+        this.x = canvas.width + 50;
+        this.width = 40;
+        this.height = 40;
+        this.y = GROUND_Y - this.height;
     }
 
-    spawnFood();
-  } else {
-    // Se não comeu, remove a cauda normalmente
-    snake.pop();
-  }
-}
-
-function setDirection(newDx, newDy) {
-  // Impede o jogador de fazer uma volta de 180 graus instantânea
-  const goingUp = dy === -1;
-  const goingDown = dy === 1;
-  const goingRight = dx === 1;
-  const goingLeft = dx === -1;
-
-  if (newDx === -1 && !goingRight) { nextDx = -1; nextDy = 0; }
-  if (newDx === 1 && !goingLeft) { nextDx = 1; nextDy = 0; }
-  if (newDy === -1 && !goingDown) { nextDx = 0; nextDy = -1; }
-  if (newDy === 1 && !goingUp) { nextDx = 0; nextDy = 1; }
-}
-
-function handleKeyPress(e) {
-  if (!isRunning) return;
-
-  // Prevenir rolagem da página com as setas e espaço
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
-    e.preventDefault();
-  }
-
-  // Tecla de Pausa (Espaço)
-  if (e.key === " " || e.key === "Spacebar") {
-    isPaused = !isPaused;
-    return;
-  }
-
-  if (isPaused) return;
-
-  // Controles W, A, S, D e Setas
-  switch (e.key) {
-    case "ArrowUp":
-    case "w":
-    case "W":
-      setDirection(0, -1);
-      break;
-    case "ArrowDown":
-    case "s":
-    case "S":
-      setDirection(0, 1);
-      break;
-    case "ArrowLeft":
-    case "a":
-    case "A":
-      setDirection(-1, 0);
-      break;
-    case "ArrowRight":
-    case "d":
-    case "D":
-      setDirection(1, 0);
-      break;
-  }
-}
-
-function spawnFood() {
-  let validPosition = false;
-
-  while (!validPosition) {
-    food.x = Math.floor(Math.random() * GRID_SIZE);
-    food.y = Math.floor(Math.random() * GRID_SIZE);
-
-    // Garante que a fruta não vai nascer em cima do corpo da cobra
-    validPosition = !snake.some(segment => segment.x === food.x && segment.y === food.y);
-  }
-}
-
-function checkCollision() {
-  const head = snake[0];
-
-  // Colisão com as paredes
-  const hitLeftWall = head.x < 0;
-  const hitRightWall = head.x >= GRID_SIZE;
-  const hitTopWall = head.y < 0;
-  const hitBottomWall = head.y >= GRID_SIZE;
-
-  if (hitLeftWall || hitRightWall || hitTopWall || hitBottomWall) {
-    return true;
-  }
-
-  // Colisão com o próprio corpo
-  for (let i = 1; i < snake.length; i++) {
-    if (head.x === snake[i].x && head.y === snake[i].y) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function handleGameOver() {
-  clearInterval(gameInterval);
-  isRunning = false;
-  finalScoreElement.textContent = score;
-  gameOverScreen.classList.remove("hidden");
-}
-
-// RENDERIZAÇÃO / DESENHO NO CANVAS
-
-function draw() {
-  // Limpa a tela
-  ctx.fillStyle = "#020617";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Desenha a grade (Grid sutil de fundo)
-  drawGrid();
-
-  // Desenha a comida
-  drawFood();
-
-  // Desenha a cobra
-  drawSnake();
-}
-
-function drawGrid() {
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 1;
-
-  for (let x = 0; x < canvas.width; x += TILE_SIZE) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-
-  for (let y = 0; y < canvas.height; y += TILE_SIZE) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
-  }
-}
-
-function drawSnake() {
-  snake.forEach((segment, index) => {
-    // Cabeça verde clara, corpo verde padrão
-    if (index === 0) {
-      ctx.fillStyle = "#86efac";
-    } else {
-      ctx.fillStyle = "#22c55e";
+    update() {
+        this.x -= currentSpeed;
     }
 
-    // Preenche o quadrado
-    ctx.fillRect(
-      segment.x * TILE_SIZE + 1,
-      segment.y * TILE_SIZE + 1,
-      TILE_SIZE - 2,
-      TILE_SIZE - 2
-    );
+    draw() {
+        ctx.save();
+        if (this.type === 'spike') {
+            // Desenha um Triângulo (Espinho)
+            ctx.fillStyle = '#ff0055';
+            ctx.shadowColor = '#ff0055';
+            ctx.shadowBlur = 15;
 
-    // Bordas arredondadas nos blocos da cobra
-    ctx.strokeStyle = "#15803d";
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y + this.height);
+            ctx.lineTo(this.x + this.width / 2, this.y);
+            ctx.lineTo(this.x + this.width, this.y + this.height);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'block') {
+            // Desenha um Bloco Retangular
+            ctx.fillStyle = '#ffbe00';
+            ctx.shadowColor = '#ffbe00';
+            ctx.shadowBlur = 15;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x + 3, this.y + 3, this.width - 6, this.height - 6);
+        }
+        ctx.restore();
+    }
+}
+
+// Sistema de Partículas para Morte
+let particles = [];
+
+function createExplosion(x, y) {
+    for (let i = 0; i < 30; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 12,
+            vy: (Math.random() - 0.5) * 12,
+            size: Math.random() * 6 + 2,
+            color: '#00f0ff',
+            alpha: 1
+        });
+    }
+}
+
+function updateParticles() {
+    particles.forEach((p, index) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= 0.03;
+        if (p.alpha <= 0) particles.splice(index, 1);
+    });
+}
+
+function drawParticles() {
+    particles.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+        ctx.restore();
+    });
+}
+
+// Fundo Parallax / Linhas de Velocidade
+let bgOffset = 0;
+function drawBackground() {
+    bgOffset = (bgOffset + currentSpeed * 0.5) % 40;
+
+    // Linhas verticais do fundo dando sensação de velocidade
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(
-      segment.x * TILE_SIZE + 1,
-      segment.y * TILE_SIZE + 1,
-      TILE_SIZE - 2,
-      TILE_SIZE - 2
-    );
-  });
+    for (let x = -bgOffset; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, GROUND_Y);
+        ctx.stroke();
+    }
+
+    // Desenha o Chão Principal com brilho
+    ctx.fillStyle = '#181925';
+    ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+
+    ctx.strokeStyle = '#00f0ff';
+    ctx.shadowColor = '#00f0ff';
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    ctx.lineTo(canvas.width, GROUND_Y);
+    ctx.stroke();
+    ctx.shadowBlur = 0; // Reset
 }
 
-function drawFood() {
-  ctx.fillStyle = "#ef4444";
-  
-  // Desenha a fruta como um círculo preenchido
-  const centerX = food.x * TILE_SIZE + TILE_SIZE / 2;
-  const centerY = food.y * TILE_SIZE + TILE_SIZE / 2;
-  const radius = TILE_SIZE / 2 - 2;
+// Lógica de Colisão
+function checkCollisions() {
+    for (let obs of obstacles) {
+        if (obs.type === 'spike') {
+            // Colisão AABB aproximada para Espinhos
+            if (
+                player.x < obs.x + obs.width - 8 &&
+                player.x + player.size > obs.x + 8 &&
+                player.y < obs.y + obs.height &&
+                player.y + player.size > obs.y
+            ) {
+                triggerGameOver();
+            }
+        } else if (obs.type === 'block') {
+            // Colisão com Blocos
+            let pRight = player.x + player.size;
+            let pBottom = player.y + player.size;
+            let obsRight = obs.x + obs.width;
+            let obsBottom = obs.y + obs.height;
 
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Detalhe de brilho na fruta
-  ctx.fillStyle = "#fca5a5";
-  ctx.beginPath();
-  ctx.arc(centerX - radius / 3, centerY - radius / 3, radius / 3, 0, Math.PI * 2);
-  ctx.fill();
+            if (pRight > obs.x && player.x < obsRight && pBottom > obs.y && player.y < obsBottom) {
+                // Checa se pousou em cima do bloco
+                let prevPlayerBottom = pBottom - player.vy;
+                if (prevPlayerBottom <= obs.y + 10 && player.vy >= 0) {
+                    player.y = obs.y - player.size;
+                    player.vy = 0;
+                    player.isGrounded = true;
+                } else {
+                    // Bateu na lateral ou por baixo -> Game Over
+                    triggerGameOver();
+                }
+            }
+        }
+    }
 }
+
+// Spawn de Obstáculos
+function handleObstacles() {
+    spawnTimer++;
+    // Intervalo aleatório ajustado com a velocidade
+    if (spawnTimer > Math.max(50, 100 - currentSpeed * 3)) {
+        let type = Math.random() > 0.4 ? 'spike' : 'block';
+        obstacles.push(new Obstacle(type));
+        spawnTimer = 0;
+    }
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        obstacles[i].update();
+        obstacles[i].draw();
+
+        // Remove obstáculos que saíram da tela
+        if (obstacles[i].x + obstacles[i].width < 0) {
+            obstacles.splice(i, 1);
+        }
+    }
+}
+
+// Interface de Pontuação (UI)
+function drawUI() {
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px sans-serif';
+    ctx.shadowColor = '#00f0ff';
+    ctx.shadowBlur = 5;
+    ctx.fillText(`DISTÂNCIA: ${Math.floor(distance)}m`, 20, 35);
+    ctx.shadowBlur = 0;
+}
+
+// Fim de Jogo
+function triggerGameOver() {
+    if (isGameOver) return;
+    isGameOver = true;
+    createExplosion(player.x + player.size / 2, player.y + player.size / 2);
+    
+    setTimeout(() => {
+        finalScoreEl.innerText = Math.floor(distance);
+        gameOverScreen.classList.remove('hidden');
+    }, 400);
+}
+
+// Reiniciar Jogo
+function restartGame() {
+    obstacles = [];
+    particles = [];
+    distance = 0;
+    currentSpeed = baseSpeed;
+    spawnTimer = 0;
+    player.reset();
+    isGameOver = false;
+    gameOverScreen.classList.add('hidden');
+    requestAnimationFrame(gameLoop);
+}
+
+// Controles
+function handleJump() {
+    if (isGameOver) return;
+    jumpRequested = true;
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        if (isGameOver) {
+            restartGame();
+        } else {
+            handleJump();
+        }
+    }
+});
+
+canvas.addEventListener('mousedown', () => {
+    if (!isGameOver) handleJump();
+});
+
+restartBtn.addEventListener('click', restartGame);
+
+// Loop Principal
+function gameLoop() {
+    // Limpa a tela
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawBackground();
+
+    if (!isGameOver) {
+        // Aumenta velocidade gradualmente
+        currentSpeed += 0.001;
+        distance += currentSpeed * 0.05;
+
+        player.update();
+        handleObstacles();
+        checkCollisions();
+        player.draw();
+    } else {
+        // Continua desenhando obstáculos no estado estático
+        obstacles.forEach(obs => obs.draw());
+    }
+
+    updateParticles();
+    drawParticles();
+    drawUI();
+
+    if (!isGameOver || particles.length > 0) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Inicia o jogo
+player.reset();
+requestAnimationFrame(gameLoop);
