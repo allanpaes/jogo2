@@ -2,12 +2,11 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Consolas', 'Courier New', monospace;
-    user-select: none;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 body {
-    background-color: #050508;
+    background-color: #080810;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -17,145 +16,63 @@ body {
 
 #game-container {
     position: relative;
-    border: 3px solid #1f2338;
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
-    background: #000;
-}
-
-canvas {
-    display: block;
-    background: #87CEEB; /* Cor padrão do céu */
-    cursor: crosshair;
-}
-
-/* UI Overlay */
-#hud {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-#stats-panel {
-    background: rgba(15, 17, 26, 0.85);
-    border: 2px solid #3a3f58;
-    border-radius: 6px;
-    padding: 12px;
-    width: 280px;
-    color: #fff;
-    backdrop-filter: blur(4px);
-    pointer-events: auto;
-}
-
-.hud-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
-}
-
-.bar-container {
-    position: relative;
-    width: 100%;
-    height: 18px;
-    background: #111;
-    border: 1px solid #444;
-    border-radius: 3px;
-    margin-bottom: 6px;
+    box-shadow: 0 0 30px rgba(0, 240, 255, 0.3);
+    border-radius: 8px;
     overflow: hidden;
 }
 
-.bar {
-    height: 100%;
-    transition: width 0.2s ease-out;
+canvas {
+    background-color: #0d0e15;
+    display: block;
 }
 
-.hp-fill { background: linear-gradient(90deg, #ff2a2a, #ff6b6b); }
-.xp-fill { background: linear-gradient(90deg, #00d2ff, #0088ff); }
-
-.bar-text {
+/* Tela de Game Over */
+#game-over-screen {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    text-align: center;
-    font-size: 0.75rem;
-    line-height: 18px;
-    font-weight: bold;
-    text-shadow: 1px 1px 2px #000;
-}
-
-#attributes-display {
-    font-size: 0.8rem;
-    color: #aaa;
-    margin-top: 4px;
-}
-
-/* Hotbar */
-#hotbar {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    margin-bottom: 10px;
-    pointer-events: auto;
-}
-
-.slot {
-    width: 70px;
-    height: 50px;
-    background: rgba(20, 24, 38, 0.85);
-    border: 2px solid #3a3f58;
-    border-radius: 4px;
-    color: #ccc;
-    font-size: 0.75rem;
+    background: rgba(13, 14, 21, 0.85);
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
-    position: relative;
-    backdrop-filter: blur(4px);
-    cursor: pointer;
-}
-
-.slot.active {
-    border-color: #00f0ff;
-    box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    align-items: center;
     color: #fff;
+    gap: 15px;
+    backdrop-filter: blur(4px);
 }
 
-.slot-key {
-    position: absolute;
-    top: 2px;
-    left: 4px;
-    font-size: 0.65rem;
-    color: #777;
+.hidden {
+    display: none !important;
 }
 
-/* Popups */
-#level-popup {
-    position: absolute;
-    top: 30%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+.neon-text-red {
+    color: #ff0055;
+    text-shadow: 0 0 10px #ff0055, 0 0 20px #ff0055;
     font-size: 3rem;
-    font-weight: bold;
-    color: #ffe600;
-    text-shadow: 0 0 20px #ffaa00, 2px 2px 0px #000;
-    pointer-events: none;
-    animation: popupAnim 1.5s forwards;
+    letter-spacing: 2px;
 }
 
-.hidden { display: none; }
+#restart-btn {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #00f0ff;
+    background: transparent;
+    border: 2px solid #00f0ff;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+    transition: all 0.2s ease;
+}
 
-@keyframes popupAnim {
-    0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
-    30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
-    100% { opacity: 0; transform: translate(-50%, -70%) scale(1); }
+#restart-btn:hover {
+    background: #00f0ff;
+    color: #0d0e15;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.8);
+}
+
+small {
+    color: #888;
 }
