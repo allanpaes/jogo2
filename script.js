@@ -1,347 +1,560 @@
+/**
+ * TERRARIA 2D ENGINE (Canvas, ES6)
+ */
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const gameOverScreen = document.getElementById('game-over-screen');
-const finalScoreEl = document.getElementById('final-score');
-const restartBtn = document.getElementById('restart-btn');
+// --- CONFIGURAÇÕES E CONSTANTES ---
+const TILE_SIZE = 16;
+const WORLD_WIDTH = 250;  // Largura do mapa em blocos
+const WORLD_HEIGHT = 150; // Altura do mapa em blocos
 
-// Configurações do Jogo
-const GROUND_Y = 320;
-let baseSpeed = 6;
-let currentSpeed = baseSpeed;
-let distance = 0;
-let isGameOver = false;
+// Tipos de Bloco
+const TILES = {
+    AIR: 0,
+    DIRT: 1,
+    GRASS: 2,
+    STONE: 3,
+    WOOD: 4,
+    ORE: 5
+};
 
-// Estado das Teclas
-let jumpRequested = false;
+const TILE_COLORS = {
+    [TILES.DIRT]: '#8B4513',
+    [TILES.GRASS]: '#2E8B57',
+    [TILES.STONE]: '#708090',
+    [TILES.WOOD]: '#A0522D',
+    [TILES.ORE]: '#FFD700'
+};
 
-// Configuração do Jogador (Quadrado)
-const player = {
-    x: 100,
-    y: GROUND_Y - 40,
-    size: 40,
-    vy: 0,
-    gravity: 0.8,
-    jumpForce: -14,
-    isGrounded: false,
-    rotation: 0, // em radianos
-    rotationSpeed: 0.15,
-
-    reset() {
-        this.y = GROUND_Y - this.size;
-        this.vy = 0;
-        this.isGrounded = true;
-        this.rotation = 0;
-    },
-
-    update() {
-        // Pulo
-        if (jumpRequested && this.isGrounded) {
-            this.vy = this.jumpForce;
-            this.isGrounded = false;
-            jumpRequested = false;
-        }
-
-        // Aplica Gravidade
-        this.vy += this.gravity;
-        this.y += this.vy;
-
-        // Rotação contínua enquanto estiver no ar
-        if (!this.isGrounded) {
-            this.rotation += this.rotationSpeed;
-        } else {
-            // Alinha o quadrado ao chão (múltiplo de 90° / PI/2)
-            this.rotation = Math.round(this.rotation / (Math.PI / 2)) * (Math.PI / 2);
-        }
-
-        // Colisão simples com o Chão Principal
-        if (this.y + this.size >= GROUND_Y) {
-            this.y = GROUND_Y - this.size;
-            this.vy = 0;
-            this.isGrounded = true;
-        }
-    },
-
-    draw() {
-        ctx.save();
-        // Translada e rotaciona a partir do centro do jogador
-        ctx.translate(this.x + this.size / 2, this.y + this.size / 2);
-        ctx.rotate(this.rotation);
-
-        // Estilo Neon
-        ctx.fillStyle = '#00f0ff';
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 15;
-        ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
-
-        // Borda interna para detalhe visual
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(-this.size / 2 + 4, -this.size / 2 + 4, this.size - 8, this.size - 8);
-
-        ctx.restore();
+// --- SISTEMA DE CÂMERA ---
+const camera = {
+    x: 0,
+    y: 0,
+    width: canvas.width,
+    height: canvas.height,
+    follow(target) {
+        this.x = target.x + target.width / 2 - this.width / 2;
+        this.y = target.y + target.height / 2 - this.height / 2;
+        
+        // Limites do mundo
+        this.x = Math.max(0, Math.min(this.x, WORLD_WIDTH * TILE_SIZE - this.width));
+        this.y = Math.max(0, Math.min(this.y, WORLD_HEIGHT * TILE_SIZE - this.height));
     }
 };
 
-// Gerenciador de Obstáculos
-let obstacles = [];
-let spawnTimer = 0;
-
-class Obstacle {
-    constructor(type) {
-        this.type = type; // 'spike' ou 'block'
-        this.x = canvas.width + 50;
-        this.width = 40;
-        this.height = 40;
-        this.y = GROUND_Y - this.height;
+// --- GERAÇÃO PROCEDURAL DO MUNDO ---
+class World {
+    constructor() {
+        this.map = new Array(WORLD_WIDTH * WORLD_HEIGHT).fill(TILES.AIR);
+        this.generateTerrain();
     }
 
-    update() {
-        this.x -= currentSpeed;
+    getTile(x, y) {
+        if (x < 0 || x >= WORLD_WIDTH || y < 0 || y >= WORLD_HEIGHT) return TILES.STONE;
+        return this.map[y * WORLD_WIDTH + x];
     }
 
-    draw() {
-        ctx.save();
-        if (this.type === 'spike') {
-            // Desenha um Triângulo (Espinho)
-            ctx.fillStyle = '#ff0055';
-            ctx.shadowColor = '#ff0055';
-            ctx.shadowBlur = 15;
-
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y + this.height);
-            ctx.lineTo(this.x + this.width / 2, this.y);
-            ctx.lineTo(this.x + this.width, this.y + this.height);
-            ctx.closePath();
-            ctx.fill();
-        } else if (this.type === 'block') {
-            // Desenha um Bloco Retangular
-            ctx.fillStyle = '#ffbe00';
-            ctx.shadowColor = '#ffbe00';
-            ctx.shadowBlur = 15;
-            ctx.fillRect(this.x, this.y, this.width, this.height);
-
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(this.x + 3, this.y + 3, this.width - 6, this.height - 6);
+    setTile(x, y, type) {
+        if (x >= 0 && x < WORLD_WIDTH && y >= 0 && y < WORLD_HEIGHT) {
+            this.map[y * WORLD_WIDTH + x] = type;
         }
-        ctx.restore();
-    }
-}
-
-// Sistema de Partículas para Morte
-let particles = [];
-
-function createExplosion(x, y) {
-    for (let i = 0; i < 30; i++) {
-        particles.push({
-            x: x,
-            y: y,
-            vx: (Math.random() - 0.5) * 12,
-            vy: (Math.random() - 0.5) * 12,
-            size: Math.random() * 6 + 2,
-            color: '#00f0ff',
-            alpha: 1
-        });
-    }
-}
-
-function updateParticles() {
-    particles.forEach((p, index) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.alpha -= 0.03;
-        if (p.alpha <= 0) particles.splice(index, 1);
-    });
-}
-
-function drawParticles() {
-    particles.forEach(p => {
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.color;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 10;
-        ctx.fillRect(p.x, p.y, p.size, p.size);
-        ctx.restore();
-    });
-}
-
-// Fundo Parallax / Linhas de Velocidade
-let bgOffset = 0;
-function drawBackground() {
-    bgOffset = (bgOffset + currentSpeed * 0.5) % 40;
-
-    // Linhas verticais do fundo dando sensação de velocidade
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    for (let x = -bgOffset; x < canvas.width; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, GROUND_Y);
-        ctx.stroke();
     }
 
-    // Desenha o Chão Principal com brilho
-    ctx.fillStyle = '#181925';
-    ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+    generateTerrain() {
+        // Gerador de superfície simplificado
+        let surfaceY = 40;
 
-    ctx.strokeStyle = '#00f0ff';
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 10;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(0, GROUND_Y);
-    ctx.lineTo(canvas.width, GROUND_Y);
-    ctx.stroke();
-    ctx.shadowBlur = 0; // Reset
-}
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+            // Suavização do terreno
+            surfaceY += Math.floor((Math.random() - 0.5) * 3);
+            surfaceY = Math.max(20, Math.min(60, surfaceY));
 
-// Lógica de Colisão
-function checkCollisions() {
-    for (let obs of obstacles) {
-        if (obs.type === 'spike') {
-            // Colisão AABB aproximada para Espinhos
-            if (
-                player.x < obs.x + obs.width - 8 &&
-                player.x + player.size > obs.x + 8 &&
-                player.y < obs.y + obs.height &&
-                player.y + player.size > obs.y
-            ) {
-                triggerGameOver();
-            }
-        } else if (obs.type === 'block') {
-            // Colisão com Blocos
-            let pRight = player.x + player.size;
-            let pBottom = player.y + player.size;
-            let obsRight = obs.x + obs.width;
-            let obsBottom = obs.y + obs.height;
-
-            if (pRight > obs.x && player.x < obsRight && pBottom > obs.y && player.y < obsBottom) {
-                // Checa se pousou em cima do bloco
-                let prevPlayerBottom = pBottom - player.vy;
-                if (prevPlayerBottom <= obs.y + 10 && player.vy >= 0) {
-                    player.y = obs.y - player.size;
-                    player.vy = 0;
-                    player.isGrounded = true;
+            for (let y = 0; y < WORLD_HEIGHT; y++) {
+                if (y < surfaceY) {
+                    this.setTile(x, y, TILES.AIR);
+                } else if (y === surfaceY) {
+                    this.setTile(x, y, TILES.GRASS);
+                } else if (y < surfaceY + 10) {
+                    this.setTile(x, y, TILES.DIRT);
                 } else {
-                    // Bateu na lateral ou por baixo -> Game Over
-                    triggerGameOver();
+                    // Minérios aleatórios nas profundezas
+                    if (Math.random() < 0.05) {
+                        this.setTile(x, y, TILES.ORE);
+                    } else {
+                        this.setTile(x, y, TILES.STONE);
+                    }
+                }
+            }
+        }
+    }
+
+    draw(ctx, camera) {
+        const startX = Math.floor(camera.x / TILE_SIZE);
+        const endX = Math.ceil((camera.x + camera.width) / TILE_SIZE);
+        const startY = Math.floor(camera.y / TILE_SIZE);
+        const endY = Math.ceil((camera.y + camera.height) / TILE_SIZE);
+
+        for (let x = startX; x < endX; x++) {
+            for (let y = startY; y < endY; y++) {
+                const tile = this.getTile(x, y);
+                if (tile !== TILES.AIR) {
+                    ctx.fillStyle = TILE_COLORS[tile] || '#fff';
+                    ctx.fillRect(
+                        Math.floor(x * TILE_SIZE - camera.x),
+                        Math.floor(y * TILE_SIZE - camera.y),
+                        TILE_SIZE,
+                        TILE_SIZE
+                    );
                 }
             }
         }
     }
 }
 
-// Spawn de Obstáculos
-function handleObstacles() {
-    spawnTimer++;
-    // Intervalo aleatório ajustado com a velocidade
-    if (spawnTimer > Math.max(50, 100 - currentSpeed * 3)) {
-        let type = Math.random() > 0.4 ? 'spike' : 'block';
-        obstacles.push(new Obstacle(type));
-        spawnTimer = 0;
+// --- CLASSE JOGADOR ---
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 14;
+        this.height = 28;
+        
+        // Física
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = 2.5;
+        this.jumpForce = -7.5;
+        this.gravity = 0.35;
+        this.grounded = false;
+
+        // Atributos RPG & Level-Up
+        this.level = 1;
+        this.xp = 0;
+        this.xpToNextLevel = 100;
+        this.hp = 100;
+        this.maxHp = 100;
+        this.attack = 12;
+        this.defense = 2;
+
+        // Ferramentas / Ações
+        this.selectedSlot = 1; // 1: Pickaxe, 2: Sword, 3: Dirt, 4: Stone, 5: Wood
+        this.attackCooldown = 0;
     }
 
-    for (let i = obstacles.length - 1; i >= 0; i--) {
-        obstacles[i].update();
-        obstacles[i].draw();
+    gainXP(amount) {
+        this.xp += amount;
+        if (this.xp >= this.xpToNextLevel) {
+            this.levelUp();
+        }
+        uiManager.updateStats(this);
+    }
 
-        // Remove obstáculos que saíram da tela
-        if (obstacles[i].x + obstacles[i].width < 0) {
-            obstacles.splice(i, 1);
+    levelUp() {
+        this.xp -= this.xpToNextLevel;
+        this.level++;
+        this.xpToNextLevel = Math.floor(this.xpToNextLevel * 1.5);
+        this.maxHp += 20;
+        this.hp = this.maxHp;
+        this.attack += 4;
+        this.defense += 1;
+
+        uiManager.showLevelPopup();
+    }
+
+    takeDamage(amount) {
+        const finalDamage = Math.max(1, amount - this.defense);
+        this.hp -= finalDamage;
+        particleSystem.addText(this.x, this.y, `-${finalDamage}`, '#ff3333');
+        
+        if (this.hp <= 0) {
+            this.hp = this.maxHp; // Respawn simples
+            this.x = 100 * TILE_SIZE;
+            this.y = 20 * TILE_SIZE;
+        }
+        uiManager.updateStats(this);
+    }
+
+    update(keys, world) {
+        // Movimento Horizontal
+        if (keys['KeyA'] || keys['ArrowLeft']) this.vx = -this.speed;
+        else if (keys['KeyD'] || keys['ArrowRight']) this.vx = this.speed;
+        else this.vx = 0;
+
+        // Pulo
+        if ((keys['KeyW'] || keys['Space'] || keys['ArrowUp']) && this.grounded) {
+            this.vy = this.jumpForce;
+            this.grounded = false;
+        }
+
+        // Gravidade
+        this.vy += this.gravity;
+
+        // Colisões AABB com o Mapa
+        this.moveAndCollide(world);
+
+        if (this.attackCooldown > 0) this.attackCooldown--;
+    }
+
+    moveAndCollide(world) {
+        // Movimento X
+        this.x += this.vx;
+        let tiles = this.getIntersectingTiles(world);
+        for (let t of tiles) {
+            if (t.type !== TILES.AIR) {
+                if (this.vx > 0) this.x = t.x * TILE_SIZE - this.width;
+                else if (this.vx < 0) this.x = (t.x + 1) * TILE_SIZE;
+                this.vx = 0;
+            }
+        }
+
+        // Movimento Y
+        this.y += this.vy;
+        this.grounded = false;
+        tiles = this.getIntersectingTiles(world);
+        for (let t of tiles) {
+            if (t.type !== TILES.AIR) {
+                if (this.vy > 0) {
+                    this.y = t.y * TILE_SIZE - this.height;
+                    this.grounded = true;
+                } else if (this.vy < 0) {
+                    this.y = (t.y + 1) * TILE_SIZE;
+                }
+                this.vy = 0;
+            }
         }
     }
+
+    getIntersectingTiles(world) {
+        const startX = Math.floor(this.x / TILE_SIZE);
+        const endX = Math.floor((this.x + this.width) / TILE_SIZE);
+        const startY = Math.floor(this.y / TILE_SIZE);
+        const endY = Math.floor((this.y + this.height) / TILE_SIZE);
+
+        let result = [];
+        for (let x = startX; x <= endX; x++) {
+            for (let y = startY; y <= endY; y++) {
+                const type = world.getTile(x, y);
+                if (type !== TILES.AIR) {
+                    result.push({ x, y, type });
+                }
+            }
+        }
+        return result;
+    }
+
+    draw(ctx, camera) {
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 8;
+        ctx.fillRect(
+            Math.floor(this.x - camera.x),
+            Math.floor(this.y - camera.y),
+            this.width,
+            this.height
+        );
+        ctx.shadowBlur = 0;
+    }
 }
 
-// Interface de Pontuação (UI)
-function drawUI() {
-    ctx.fillStyle = '#fff';
-    ctx.font = '20px sans-serif';
-    ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 5;
-    ctx.fillText(`DISTÂNCIA: ${Math.floor(distance)}m`, 20, 35);
-    ctx.shadowBlur = 0;
-}
+// --- CLASSE INIMIGOS (IA) ---
+class Enemy {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type; // 'slime' ou 'eye'
+        this.width = type === 'slime' ? 20 : 16;
+        this.height = type === 'slime' ? 14 : 16;
+        
+        this.hp = type === 'slime' ? 30 : 20;
+        this.maxHp = this.hp;
+        this.damage = type === 'slime' ? 8 : 12;
+        this.xpValue = type === 'slime' ? 25 : 40;
 
-// Fim de Jogo
-function triggerGameOver() {
-    if (isGameOver) return;
-    isGameOver = true;
-    createExplosion(player.x + player.size / 2, player.y + player.size / 2);
-    
-    setTimeout(() => {
-        finalScoreEl.innerText = Math.floor(distance);
-        gameOverScreen.classList.remove('hidden');
-    }, 400);
-}
+        this.vx = 0;
+        this.vy = 0;
+        this.color = type === 'slime' ? '#32cd32' : '#ff0055';
+    }
 
-// Reiniciar Jogo
-function restartGame() {
-    obstacles = [];
-    particles = [];
-    distance = 0;
-    currentSpeed = baseSpeed;
-    spawnTimer = 0;
-    player.reset();
-    isGameOver = false;
-    gameOverScreen.classList.add('hidden');
-    requestAnimationFrame(gameLoop);
-}
+    update(player, world) {
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-// Controles
-function handleJump() {
-    if (isGameOver) return;
-    jumpRequested = true;
-}
-
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp') {
-        e.preventDefault();
-        if (isGameOver) {
-            restartGame();
+        // Perseguição se o jogador estiver próximo
+        if (dist < 250) {
+            if (this.type === 'slime') {
+                this.vx = dx > 0 ? 1 : -1;
+                // Pulo automático ao encarar obstáculos
+                if (Math.random() < 0.02 && this.vy === 0) {
+                    this.vy = -5;
+                }
+                this.vy += 0.35; // Gravidade
+            } else if (this.type === 'eye') {
+                // Inimigo voador
+                this.vx = (dx / dist) * 1.5;
+                this.vy = (dy / dist) * 1.5;
+            }
         } else {
-            handleJump();
+            this.vx = 0;
+            if (this.type === 'slime') this.vy += 0.35;
+        }
+
+        // Aplicação básica de movimento simples
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Limite no Chão para Slimes
+        if (this.type === 'slime') {
+            const tileY = Math.floor((this.y + this.height) / TILE_SIZE);
+            const tileX = Math.floor(this.x / TILE_SIZE);
+            if (world.getTile(tileX, tileY) !== TILES.AIR) {
+                this.y = (tileY * TILE_SIZE) - this.height;
+                this.vy = 0;
+            }
+        }
+    }
+
+    takeDamage(amount, player) {
+        this.hp -= amount;
+        particleSystem.addText(this.x, this.y, `-${amount}`, '#ffffff');
+        
+        // Knockback simples
+        this.vx = player.x < this.x ? 4 : -4;
+        this.vy = -2;
+
+        if (this.hp <= 0) {
+            player.gainXP(this.xpValue);
+            return true; // Morto
+        }
+        return false;
+    }
+
+    draw(ctx, camera) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(
+            Math.floor(this.x - camera.x),
+            Math.floor(this.y - camera.y),
+            this.width,
+            this.height
+        );
+    }
+}
+
+// --- SISTEMA DE PARTÍCULAS E NÚMEROS DE DANO ---
+class ParticleSystem {
+    constructor() {
+        this.particles = [];
+        this.texts = [];
+    }
+
+    addText(x, y, text, color) {
+        this.texts.push({ x, y, text, color, alpha: 1, vy: -1 });
+    }
+
+    addBlockParticles(x, y, color) {
+        for (let i = 0; i < 6; i++) {
+            this.particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                size: Math.random() * 3 + 1,
+                color,
+                life: 20
+            });
+        }
+    }
+
+    update() {
+        // Partículas
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life--;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        // Textos de Dano
+        for (let i = this.texts.length - 1; i >= 0; i--) {
+            let t = this.texts[i];
+            t.y += t.vy;
+            t.alpha -= 0.02;
+            if (t.alpha <= 0) this.texts.splice(i, 1);
+        }
+    }
+
+    draw(ctx, camera) {
+        // Renderizar Partículas
+        for (let p of this.particles) {
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x - camera.x, p.y - camera.y, p.size, p.size);
+        }
+
+        // Renderizar Texto Flutuante
+        ctx.font = 'bold 12px Consolas';
+        for (let t of this.texts) {
+            ctx.save();
+            ctx.globalAlpha = t.alpha;
+            ctx.fillStyle = t.color;
+            ctx.fillText(t.text, t.x - camera.x, t.y - camera.y);
+            ctx.restore();
+        }
+    }
+}
+
+// --- UI MANAGER ---
+class UIManager {
+    constructor() {
+        this.hpBar = document.getElementById('hp-bar');
+        this.hpText = document.getElementById('hp-text');
+        this.xpBar = document.getElementById('xp-bar');
+        this.xpText = document.getElementById('xp-text');
+        this.levelDisplay = document.getElementById('level-display');
+        this.atqVal = document.getElementById('atq-val');
+        this.defVal = document.getElementById('def-val');
+        this.levelPopup = document.getElementById('level-popup');
+        this.slots = document.querySelectorAll('.slot');
+    }
+
+    updateStats(player) {
+        const hpPercent = Math.max(0, (player.hp / player.maxHp) * 100);
+        const xpPercent = Math.min(100, (player.xp / player.xpToNextLevel) * 100);
+
+        this.hpBar.style.width = `${hpPercent}%`;
+        this.hpText.innerText = `${player.hp} / ${player.maxHp}`;
+        this.xpBar.style.width = `${xpPercent}%`;
+        this.xpText.innerText = `${player.xp}/${player.xpToNextLevel}`;
+        this.levelDisplay.innerText = player.level;
+        this.atqVal.innerText = player.attack;
+        this.defVal.innerText = player.defense;
+    }
+
+    setActiveSlot(slotIndex) {
+        this.slots.forEach(slot => slot.classList.remove('active'));
+        const active = document.querySelector(`.slot[data-slot="${slotIndex}"]`);
+        if (active) active.classList.add('active');
+    }
+
+    showLevelPopup() {
+        this.levelPopup.classList.remove('hidden');
+        setTimeout(() => this.levelPopup.classList.add('hidden'), 1500);
+    }
+}
+
+// --- INICIALIZAÇÃO E LOOP DO JOGO ---
+const world = new World();
+const player = new Player(120 * TILE_SIZE, 30 * TILE_SIZE);
+const particleSystem = new ParticleSystem();
+const uiManager = new UIManager();
+
+let enemies = [
+    new Enemy(110 * TILE_SIZE, 30 * TILE_SIZE, 'slime'),
+    new Enemy(130 * TILE_SIZE, 30 * TILE_SIZE, 'slime'),
+    new Enemy(125 * TILE_SIZE, 20 * TILE_SIZE, 'eye')
+];
+
+// Mapeamento de Controles
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].includes(e.code)) {
+        player.selectedSlot = parseInt(e.code.replace('Digit', ''));
+        uiManager.setActiveSlot(player.selectedSlot);
+    }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Ações do Mouse (Quebrar / Construir / Atacar)
+canvas.addEventListener('mousedown', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left + camera.x;
+    const mouseY = e.clientY - rect.top + camera.y;
+
+    const tileX = Math.floor(mouseX / TILE_SIZE);
+    const tileY = Math.floor(mouseY / TILE_SIZE);
+
+    // Distância máxima de alcance (Alcance de mineração)
+    const pCenterX = player.x + player.width / 2;
+    const pCenterY = player.y + player.height / 2;
+    const dist = Math.hypot(mouseX - pCenterX, mouseY - pCenterY);
+
+    if (dist < 120) { // Alcance de interatividade
+        if (player.selectedSlot === 1) { 
+            // PICARETA: Minar Bloco
+            const currentTile = world.getTile(tileX, tileY);
+            if (currentTile !== TILES.AIR) {
+                particleSystem.addBlockParticles(mouseX, mouseY, TILE_COLORS[currentTile]);
+                world.setTile(tileX, tileY, TILES.AIR);
+                player.gainXP(5); // XP por mineração
+            }
+        } else if (player.selectedSlot === 2) {
+            // ESPADA: Atacar Inimigos
+            if (player.attackCooldown <= 0) {
+                player.attackCooldown = 15;
+                enemies.forEach((enemy, index) => {
+                    const eDist = Math.hypot((enemy.x + enemy.width/2) - mouseX, (enemy.y + enemy.height/2) - mouseY);
+                    if (eDist < 30) {
+                        const isDead = enemy.takeDamage(player.attack, player);
+                        if (isDead) enemies.splice(index, 1);
+                    }
+                });
+            }
+        } else {
+            // CONSTRUÇÃO: Colocar Bloco (Slots 3, 4, 5)
+            const tileToPlace = player.selectedSlot === 3 ? TILES.DIRT : 
+                               (player.selectedSlot === 4 ? TILES.STONE : TILES.WOOD);
+            
+            if (world.getTile(tileX, tileY) === TILES.AIR) {
+                world.setTile(tileX, tileY, tileToPlace);
+            }
         }
     }
 });
-
-canvas.addEventListener('mousedown', () => {
-    if (!isGameOver) handleJump();
-});
-
-restartBtn.addEventListener('click', restartGame);
 
 // Loop Principal
 function gameLoop() {
-    // Limpa a tela
+    // 1. Atualizações
+    player.update(keys, world);
+    camera.follow(player);
+
+    // Atualiza Inimigos & Colisões com o Jogador
+    enemies.forEach(enemy => {
+        enemy.update(player, world);
+
+        // Colisão com o Jogador (Dano)
+        if (
+            player.x < enemy.x + enemy.width &&
+            player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height &&
+            player.y + player.height > enemy.y
+        ) {
+            player.takeDamage(enemy.damage);
+        }
+    });
+
+    // Spawn Dinâmico de Inimigos
+    if (enemies.length < 5 && Math.random() < 0.005) {
+        const spawnX = player.x + (Math.random() - 0.5) * 500;
+        const spawnY = player.y - 100;
+        const type = Math.random() > 0.5 ? 'slime' : 'eye';
+        enemies.push(new Enemy(spawnX, spawnY, type));
+    }
+
+    particleSystem.update();
+
+    // 2. Renderização
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    drawBackground();
+    world.draw(ctx, camera);
+    player.draw(ctx, camera);
+    enemies.forEach(enemy => enemy.draw(ctx, camera));
+    particleSystem.draw(ctx, camera);
 
-    if (!isGameOver) {
-        // Aumenta velocidade gradualmente
-        currentSpeed += 0.001;
-        distance += currentSpeed * 0.05;
-
-        player.update();
-        handleObstacles();
-        checkCollisions();
-        player.draw();
-    } else {
-        // Continua desenhando obstáculos no estado estático
-        obstacles.forEach(obs => obs.draw());
-    }
-
-    updateParticles();
-    drawParticles();
-    drawUI();
-
-    if (!isGameOver || particles.length > 0) {
-        requestAnimationFrame(gameLoop);
-    }
+    requestAnimationFrame(gameLoop);
 }
 
-// Inicia o jogo
-player.reset();
+// Inicia
+uiManager.updateStats(player);
 requestAnimationFrame(gameLoop);
