@@ -3,46 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terraria 2D Canvas Engine</title>
+    <title>Terraria Clone JS</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <div id="game-container">
-        <canvas id="gameCanvas" width="1000" height="600"></canvas>
-
+        <canvas id="gameCanvas"></canvas>
+        
         <div id="hud">
-            <div id="stats-panel">
-                <div class="hud-row">
-                    <span class="hud-label">NÍVEL: <strong id="level-display">1</strong></span>
-                    <span class="hud-label">XP: <span id="xp-text">0/100</span></span>
-                </div>
-                
+            <div class="stats-panel">
                 <div class="bar-container">
-                    <div id="hp-bar" class="bar hp-fill" style="width: 100%;"></div>
-                    <span id="hp-text" class="bar-text">100 / 100</span>
+                    <span>HP: <span id="hp-text">100/100</span></span>
+                    <div id="hp-bar" class="bar hp"></div>
                 </div>
-
                 <div class="bar-container">
-                    <div id="xp-bar" class="bar xp-fill" style="width: 0%;"></div>
-                </div>
-
-                <div id="attributes-display">
-                    <span>ATQ: <strong id="atq-val">10</strong></span> | 
-                    <span>DEF: <strong id="def-val">2</strong></span>
+                    <span>XP: <span id="xp-text">0/100</span> (Nível <span id="level-text">1</span>)</span>
+                    <div id="xp-bar" class="bar xp"></div>
                 </div>
             </div>
 
-            <div id="hotbar">
-                <div class="slot active" data-slot="1"><span class="slot-key">1</span> Pickaxe</div>
-                <div class="slot" data-slot="2"><span class="slot-key">2</span> Sword</div>
-                <div class="slot" data-slot="3"><span class="slot-key">3</span> Dirt</div>
-                <div class="slot" data-slot="4"><span class="slot-key">4</span> Stone</div>
-                <div class="slot" data-slot="5"><span class="slot-key">5</span> Wood</div>
+            <div id="inventory">
+                <div class="slot active" data-block="1">Terra (1)</div>
+                <div class="slot" data-block="2">Pedra (2)</div>
+                <div class="slot" data-block="3">Madeira (3)</div>
+            </div>
+
+            <div id="stats-menu">
+                <h3>Atributos (Pontos: <span id="stat-points">0</span>)</h3>
+                <button onclick="upgradeStat('hp')">+ Vida</button>
+                <button onclick="upgradeStat('damage')">+ Dano</button>
+                <button onclick="upgradeStat('speed')">+ Velocidade</button>
             </div>
         </div>
-
-        <div id="level-popup" class="hidden">LEVEL UP!</div>
     </div>
 
     <script src="script.js"></script>
