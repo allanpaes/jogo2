@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terraria Clone JS</title>
+    <title>Terraria JS - Advanced Engine</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,30 +11,32 @@
         <canvas id="gameCanvas"></canvas>
         
         <div id="hud">
-            <div class="stats-panel">
-                <div class="bar-container">
-                    <span>HP: <span id="hp-text">100/100</span></span>
-                    <div id="hp-bar" class="bar hp"></div>
+            <div class="hud-box stats-box">
+                <div class="stat-row">
+                    <span class="label">VIDA</span>
+                    <div class="bar-bg"><div id="hp-bar" class="bar hp"></div></div>
+                    <span id="hp-text" class="value">100/100</span>
                 </div>
-                <div class="bar-container">
-                    <span>XP: <span id="xp-text">0/100</span> (Nível <span id="level-text">1</span>)</span>
-                    <div id="xp-bar" class="bar xp"></div>
+                <div class="stat-row">
+                    <span class="label">XP</span>
+                    <div class="bar-bg"><div id="xp-bar" class="bar xp"></div></div>
+                    <span id="xp-text" class="value">0/100</span>
                 </div>
+                <div class="level-badge">NÍVEL <span id="level-num">1</span></div>
             </div>
 
-            <div id="inventory">
-                <div class="slot active" data-block="1">Terra (1)</div>
-                <div class="slot" data-block="2">Pedra (2)</div>
-                <div class="slot" data-block="3">Madeira (3)</div>
-            </div>
+            <div id="hotbar" class="hud-box">
+                </div>
 
-            <div id="stats-menu">
-                <h3>Atributos (Pontos: <span id="stat-points">0</span>)</h3>
-                <button onclick="upgradeStat('hp')">+ Vida</button>
-                <button onclick="upgradeStat('damage')">+ Dano</button>
-                <button onclick="upgradeStat('speed')">+ Velocidade</button>
+            <div id="stats-menu" class="hud-box">
+                <div class="menu-title">PONTOS: <span id="stat-points">0</span></div>
+                <button class="btn-upgrade" onclick="game.player.upgrade('hp')">+ Vida Máxima</button>
+                <button class="btn-upgrade" onclick="game.player.upgrade('damage')">+ Dano Físico</button>
+                <button class="btn-upgrade" onclick="game.player.upgrade('speed')">+ Velocidade</button>
             </div>
         </div>
+
+        <div id="crosshair"></div>
     </div>
 
     <script src="script.js"></script>
